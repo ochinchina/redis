@@ -29,6 +29,7 @@
 
 #include "server.h"
 #include "cluster.h"
+#include "possible_expires.h"
 
 #include <signal.h>
 #include <ctype.h>
@@ -226,7 +227,14 @@ robj *dbRandomKey(redisDb *db) {
 int dbDelete(redisDb *db, robj *key) {
     /* Deleting an entry from the expires dict will not free the sds of
      * the key, because it is shared with the main dictionary. */
-    if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
+    if (dictSize(db->expires) > 0) {
+        long long expire = getExpire(db, key );
+	if( expire != -1 ) {
+            dictDelete(db->expires,key->ptr );
+	    //only for slave
+	    if( server.masterhost ) removePossibleKeys( db->id );
+	}
+    }
     if (dictDelete(db->dict,key->ptr) == DICT_OK) {
         if (server.cluster_enabled) slotToKeyDel(key);
         return 1;
@@ -281,6 +289,7 @@ long long emptyDb(void(callback)(void*)) {
         removed += dictSize(server.db[j].dict);
         dictEmpty(server.db[j].dict,callback);
         dictEmpty(server.db[j].expires,callback);
+	emptyPossibleExpire( j );
     }
     if (server.cluster_enabled) slotToKeyFlush();
     return removed;
@@ -852,6 +861,7 @@ void setExpire(redisDb *db, robj *key, long long when) {
     serverAssertWithInfo(NULL,key,kde != NULL);
     de = dictReplaceRaw(db->expires,dictGetKey(kde));
     dictSetSignedIntegerVal(de,when);
+    addPossibleExpire( db->id, key, when / 1000 );
 }
 
 /* Return the expire time of the specified key, or -1 if no expire

@@ -504,6 +504,7 @@ struct evictionPoolEntry {
 typedef struct redisDb {
     dict *dict;                 /* The keyspace for this DB */
     dict *expires;              /* Timeout of keys with a timeout set */
+    dictEntry* (*getExpireKey)(int, dict*); //get the expire key
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP) */
     dict *ready_keys;           /* Blocked keys that received a PUSH */
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */

@@ -32,6 +32,7 @@
 #include "slowlog.h"
 #include "bio.h"
 #include "latency.h"
+#include "possible_expires.h"
 
 #include <time.h>
 #include <signal.h>
@@ -843,13 +844,14 @@ void activeExpireCycle(int type) {
 
             if (num > ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP)
                 num = ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP;
-
+			
             while (num--) {
                 dictEntry *de;
                 long long ttl;
-
-                if ((de = dictGetRandomKey(db->expires)) == NULL) break;
-                ttl = dictGetSignedIntegerVal(de)-now;
+                
+                //if ((de = dictGetRandomKey(db->expires)) == NULL) break;				               
+                if( (de = db->getExpireKey( db->id, db->expires) ) == NULL ) break;
+                ttl = dictGetSignedIntegerVal(de)-now;                
                 if (activeExpireCycleTryExpire(db,de,now)) expired++;
                 if (ttl > 0) {
                     /* We want the average TTL of keys yet not expired. */
@@ -1913,9 +1915,11 @@ void initServer(void) {
     }
 
     /* Create the Redis databases, and initialize other internal state. */
+    initPossibleExpires(server.dbnum);
     for (j = 0; j < server.dbnum; j++) {
         server.db[j].dict = dictCreate(&dbDictType,NULL);
         server.db[j].expires = dictCreate(&keyptrDictType,NULL);
+        server.db[j].getExpireKey = &getPossibleExpireKey;
         server.db[j].blocking_keys = dictCreate(&keylistDictType,NULL);
         server.db[j].ready_keys = dictCreate(&setDictType,NULL);
         server.db[j].watched_keys = dictCreate(&keylistDictType,NULL);
